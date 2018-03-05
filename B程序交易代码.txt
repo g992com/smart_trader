@@ -1,0 +1,159 @@
+//------------------------------------------------------------------------
+// 简称: B_Pro_Trade
+// 名称: B程序交易
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出:
+// 版本: 2013-3-26 8:47 定稿程序，添加了滑点和浮动点数
+//------------------------------------------------------------------------
+
+
+Params
+	//11:00、13:00开多仓；10:00、10:30开空仓
+    	Numeric kcsjh10(0.10);//10点
+	Numeric kcsjh11(0.11);//11点
+	Numeric kcsjh13(0.13);//13点
+    	Numeric kcsjm30(0.30);//30分
+	
+    	Numeric dzs(0.33);//多止损：0.33%；
+	Numeric kzs(0.8);//空止损：0.8%；
+	
+	
+	//全局变量ID
+    	Numeric tag(30);//初始化标志
+	Numeric dz(31);//多止损价
+	Numeric kz(32);//空止损价
+	
+	//收盘平仓时间：15:09
+	Numeric pcsjh(0.15);
+	Numeric pcsjm(0.09);
+	
+	Numeric dtag(1);//做多条件标志
+	Numeric ktag(-1);//做空条件标志
+	
+	Numeric hd(1);//验算用滑点：1
+ 
+	Numeric kcfd(2);//开仓价浮动点数：2
+	Numeric pcfd(1);//平仓价浮动点数：1
+	
+Vars
+	
+Begin
+	/*-------------------------------初始化全局变量--------------------------*/
+	if(GetGlobalVar(tag)==InvalidNumeric)
+	{    
+		if(MarketPosition==0)
+		{
+			SetGlobalVar(tag,0);
+			SetGlobalVar(dz,0);//多单止损
+			SetGlobalVar(kz,99999);//空单止损			
+		}
+		else
+		{
+			SetGlobalVar(dz,Round(EntryPrice*(1-dzs/100),1));
+			SetGlobalVar(kz,Round(EntryPrice*(1+kzs/100),1));
+		}
+		
+	}
+
+	/*-------------------------------获取交易信号并开仓--------------------------*/
+	//做多
+	if(MarketPosition==0 And (Time==kcsjh11 Or Time==kcsjh13) And Value(GetTBProfileString("BproSignal",Text(Date+Time)))==dtag And (BarStatus!=2 Or (BarStatus==2 And BarsSinceExit!=0)))
+	{
+		if(BarStatus==2)
+		{
+			Buy(0,Open+kcfd);
+		}else
+		{
+			Buy(0,Open+hd);
+		}
+		SetGlobalVar(dz,Round(EntryPrice*(1-dzs/100),1));//记录止损价
+		If(AlertEnabled)
+		{
+			Alert("B程序"+Text(EntryPrice)+"开多仓，止损价"+Text(GetGlobalVar(dz)));
+		}
+
+	}
+	
+	//做空
+	if(MarketPosition==0 And (Time==kcsjh10 Or Time==kcsjh10+kcsjm30/100) And Value(GetTBProfileString("BproSignal",Text(Date+Time)))==ktag And (BarStatus!=2 Or (BarStatus==2 And BarsSinceExit!=0)))
+	{
+		if(BarStatus==2)
+		{
+			SellShort(0,Open-kcfd);
+		}else
+		{
+			SellShort(0,Open-hd);
+		}
+		SetGlobalVar(kz,Round(EntryPrice*(1+kzs/100),1));//记录止损价
+		If(AlertEnabled)
+		{
+			Alert("B程序"+Text(EntryPrice)+"开空仓，止损价"+Text(GetGlobalVar(kz)));
+		}
+
+	}
+	
+	/*--------------------------平仓-----------------------------*/
+	//多止损
+	If(MarketPosition>0 And Low<=GetGlobalVar(dz))
+	{
+		if(BarStatus==2)
+		{
+			sell(0,Close-pcfd);
+		}else
+		{
+			sell(0,GetGlobalVar(dz)-hd);
+		}
+		If(AlertEnabled)
+		{
+			Alert("B程序"+Text(ExitPrice)+"止损");
+		}
+
+	}
+	
+	//空止损
+	If(MarketPosition<0 And High>=GetGlobalVar(kz))
+	{
+		if(BarStatus==2)
+		{
+			BuyToCover(0,Close+pcfd);
+		}else
+		{
+			BuyToCover(0,GetGlobalVar(kz)+hd);
+		}
+		If(AlertEnabled)
+		{
+			Alert("B程序"+Text(ExitPrice)+"止损");
+		}
+
+	}
+
+	//按时平仓
+	If(time==(pcsjh+pcsjm/100) And MarketPosition!=0)
+	{
+		if(BarStatus==2)
+		{
+			Sell(0,Open-pcfd);
+			BuyToCover(0,Open+pcfd);
+		}else
+		{
+			Sell(0,Open-hd);
+			BuyToCover(0,Open+hd);
+		}
+		If(AlertEnabled)
+		{
+			Alert("B程序"+Text(ExitPrice)+"平仓");
+		}
+
+	}
+	
+End
+
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/02/27 23:43
+// 版权所有	g992com
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------------

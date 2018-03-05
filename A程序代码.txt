@@ -1,0 +1,475 @@
+//------------------------------------------------------------------------
+// 简称: A_Pro
+// 名称: A程序
+// 类别: 公式应用
+// 类型: 用户应用
+//------------------------------------------------------------------------
+
+/*------------------------------------------------------------------------
+1、分时线在分时均线的一侧连续运行30分钟（分时线穿越均价线<=0.6/1000可接受）；
+2、分时均线高于昨结今开平均价做多，低于昨结今开平均价做空；
+3、现价在分时均线上(>0.1%)做多，在分时均线下（>0.1%)做空；
+4、30分钟K线为阳做多，30分钟K线为阴做空；
+5、开仓价与分时均价差<0.8%；
+6、固定止损:多0.6%，空0.7%；
+7、现价与昨结涨跌幅>=0.3%取消昨结算价；
+8、达到指标可在10点14、15、16分范围内开仓；
+9、日内10:15开仓，15:09:00平仓。
+-------------------------------------------------------------------------*/
+
+Params
+
+ Numeric jsjzq(60);//结算价周期：60分钟
+ 
+ Numeric duojcmin(0.10);//做多时要求的现价与分时均线价差下限：0.1%
+ Numeric duojcmax(0.80);//做多时要求的现价与分时均线价差上限：0.8%
+ 
+ Numeric kongjcmin(-0.80);//做空时要求的现价与分时均线价差下限：-0.8%
+ Numeric kongjcmax(-0.10);//做空时要求的现价与分时均线价差上限：-0.1%
+ 
+ Numeric kzs(0.70);//空止损：0.7%
+ Numeric dzs(0.60);//多止损：0.6%
+ 
+ Numeric zf(0.30);//取消昨结算价的涨幅限制：0.3%
+ Numeric df(-0.30);//取消昨结算价的跌幅限制：-0.3%
+ 
+ Numeric lenth(30);//连续运行时间：30分钟
+ Numeric mcmax(0.06);//现价在均线下侧连续运行时毛刺的最大值：0.06%
+ Numeric mcmin(-0.06);//现价在均线上侧连续运行时毛刺的最小值：-0.06%
+ Numeric mclenth(3);//允许的毛刺跨度
+ Numeric mc(1);//允许的毛刺数量
+
+ //开仓时机：10点14、15、16分
+ Numeric kcsjh(0.10);//10点
+ Numeric kcsj14(0.14);//14分
+ Numeric kcsj15(0.15);//15分
+ Numeric kcsj16(0.16);//16分
+ //Numeric nokcsjxz(0);//1为不限制开仓时间；0为限制开仓时机
+ 
+ Numeric pcsjh(0.15);//收盘平仓时间：15:09
+ Numeric pcsjm(0.09);
+ 
+ //提供数据给C程序使用的参数
+ Numeric kmah1(0.09);//9点
+ Numeric kmah2(0.10);//10点
+ Numeric kmam1(0.44);//44分
+ Numeric kmam2(0.14);//14分
+ 
+ //全局变量ID
+ Numeric dk(10);//多开成交价
+ Numeric dz(15);//多止损价
+ Numeric kk(11);//空开成交价
+ Numeric kz(16);//空止损价
+ Numeric zscount(17);//打到止损价的跳数
+ 
+Vars
+
+ NumericSeries avl;//日内均价
+ NumericSeries VolCum;//成交量
+ NumericSeries opp;
+ NumericSeries AmountCum;//成交金额
+ 
+ //调试用参数
+ StringSeries avlstr;
+ StringSeries pj;
+ StringSeries clostr;
+ StringSeries jsjstr;
+ StringSeries jsAmstr;
+ StringSeries jsvostr;
+ StringSeries jkstr;
+ StringSeries cjstr;
+ StringSeries zsstr;
+ StringSeries datestr;
+ StringSeries timestr;
+ StringSeries lx;
+ 
+ NumericSeries jsj;//结算价
+ //Numeric jsjzqi;//计算结算价用的循环变量
+ Numeric jsji;//计算结算价用的循环变量
+ NumericSeries jsAmountCum(0);//计算结算价用的成交金额
+ NumericSeries jsVolCum(0);//计算结算价用的成交量
+ 
+ NumericSeries jk;//今天开盘价
+ Numeric iTime;//时间变量
+ Numeric kopen;//K线开盘价
+ Numeric kclose;//K线收盘价
+ Numeric jc;//现价与分时均价价差
+ Numeric xjzdf;//现价涨跌幅
+ Numeric zjjkpj;//昨结今开平均价
+ 
+ Numeric lxi;//连续运行计算用的循环变量
+ Numeric mci;//毛刺数量
+ Numeric mclenthi;//毛刺跨度
+ Numeric mcmaxlenth;//毛刺最大跨度
+ 
+  
+ Bool duokcon(False);//30分钟K线为阳做多
+ Bool kongkcon(False);//30分钟K线为阴做空
+ 
+ Bool duojccon(False);//现价在分时均线上(>0.1%)做多，与分时均价差<0.8%
+ Bool kongjccon(False);//在分时均线下（>0.1%)做空，与分时均价差<0.8%
+ 
+ Bool duofspjcon(False);//分时均线高于平均价做多；现价涨跌幅>=0.3%取消昨结算价,（涨跌幅=(现价-昨结价）/昨结价*100%）
+ Bool kongfspjcon(False);//分时均线低于平均价做空；现价涨跌幅>=0.3%取消昨结算价,（涨跌幅=(现价-昨结价）/昨结价*100%）
+ 
+ //分时线30分(>=29分钟)不纠结（分时线穿越均价线<=0.6/1000）；
+ BoolSeries konglxcon(False);
+ BoolSeries duolxcon(False);
+ 
+
+            
+Begin 
+
+/*-------------------------------初始化全局变量--------------------------*/
+  if(GetGlobalVar(0)==InvalidNumeric)
+	{    
+		if(MarketPosition==0)
+		{
+			SetGlobalVar(0,0);
+			SetGlobalVar(dk,0);//多单建仓价
+			SetGlobalVar(dz,0);//多单止损
+			SetGlobalVar(kk,999999);//空单建仓价
+			SetGlobalVar(kz,99999);//空单止损			
+		}
+		else
+		{
+			SetGlobalVar(dz,Round(EntryPrice*(1-dzs/100),1));
+			SetGlobalVar(kz,Round(EntryPrice*(1+kzs/100),1));
+		}
+		
+	}
+
+
+/*-------------------------------日内均线--------------------------*/
+   if(date!=date[1])
+ {
+   Amountcum=close*Vol;
+   volcum=vol;
+   avl=close;
+   opp=open;
+   }Else
+   {
+  AmountCum = amountcum[1]+close*vol;
+  VolCum = volcum[1]+vol;
+  avl=Round(amountcum/volcum,1);
+   }
+   PlotNumeric("avl",avl,0,red);
+   PlotNumeric("duoavlsx",Round(avl*(1+duojcmax/100),1),0,Magenta);
+   PlotNumeric("duoavlxx",Round(avl*(1+duojcmin/100),1),0,Magenta);
+   PlotNumeric("kongavlxx",Round(avl*(1+kongjcmin/100),1),0,Magenta);
+   PlotNumeric("kongavlsx",Round(avl*(1+kongjcmax/100),1),0,Magenta);
+   //将9点44和10点14的分时均价写入数据库，共C程序使用
+   If((Time==(kmah1+kmam1/100)) Or Time==(kmah2+kmam2/100))
+   {
+		SetTBProfileString(Symbol+"avl",Text(Date+Time),Text(avl));
+   }
+   
+/*-------------------计算结算价-----------------------------*/
+   jsAmountCum=0;//初始化交易金额
+   jsVolCum=0;//初始化交易量
+   
+   If(date!=date[1])
+   { 
+     jk=open;//当天第一根K线的开盘价即为当天的开盘价
+	 	 
+     jsji=1;
+	 iTime=Time[jsji];
+		 While(iTime>=0.141400)
+    {
+	    jsAmountCum=jsAmountCum+close[jsji]*Vol[jsji];
+		jsVolCum=jsVolCum+vol[jsji];
+		
+		jsji=jsji+1;
+		iTime=Time[jsji];
+	
+	}
+	jsj=Round(jsAmountCum/jsVolCum,1);//计算结算价
+	
+	 /*这个结算价循环计算，只计算了最近60根K线，没有算到14点14分的K线，先使用上面的算法
+	 for  jsjzqi = 1 To jsjzq
+    {
+	    if(Time[jsjzqi]>=0.141400)
+	 {
+	    jsAmountCum=jsAmountCum+close[jsjzqi]*Vol[jsjzqi];
+		jsVolCum=jsVolCum+vol[jsjzqi];
+		
+		jsAmstr=Text(close[jsjzqi]*Vol[jsjzqi]);
+        jsvostr=Text(Vol[jsjzqi]);
+        FileAppend("F:\\期指\\TB\\A_Pro_x.txt","      日期="+DateToString(Date[jsjzqi])+"    时间="+TimeToString(time[jsjzqi])+"    成交金额="+jsAmstr+"    成交量="+jsvostr);
+	 }else
+	 {
+	    Break;
+	 }
+		
+    }
+   */   
+   }
+   
+   PlotNumeric("pjj",Round((jsj+jk)/2,1),0,Green);
+   PlotNumeric("jsj",jsj,0,Yellow);
+   PlotNumeric("jk",jk,0,Blue);
+   PlotNumeric("zf",Round((1+zf/100)*jsj,1),0,White);
+   PlotNumeric("df",Round((1+df/100)*jsj,1),0,White);
+   /*-------调试用
+   jsjstr=Text(jsj);
+   jsAmstr=Text(jsAmountCum);
+   jsvostr=Text(jsVolCum);
+   jkstr=Text(jk);
+   FileAppend("F:\\期指\\TB\\A_Pro.txt","均价="+avlstr+"      日期="+DateToString(Date)+"    时间="+TimeToString(time)+"    结算="+jsjstr+"    成交金额="+jsAmstr+"    成交量="+jsvostr+"    今开="+jkstr);
+   ---------------*/
+/*----------------------------计算结算价结束------------------------------------*/
+
+/*----------------------------指标判断并建仓------------------------------------------*/
+
+  if(Time==(kcsjh+kcsj14/100) Or Time==(kcsjh+kcsj15/100) Or Time==(kcsjh+kcsj16/100))
+	{
+	  //前30分钟收阳做多，前30分钟收阴做空
+		kclose=close[1];
+		jsji=1;
+		iTime=Time[jsji];
+		While(iTime>=0.0945)
+         {
+	      jsji=jsji+1;
+		  iTime=Time[jsji];
+		 }
+	    kopen=open[jsji-1];
+	    if(kclose>kopen)//30分钟K线为阳
+	     {
+	      duokcon=True;
+	      kongkcon=False;
+	     }else if(kclose<kopen)//30分钟K线为阴
+		 {
+	      duokcon=False;
+	      kongkcon=True;
+	     }
+				
+		//现价在分时均线上(>0.1%)做多，在分时均线下（>0.1%)做空;开仓价与分时均价差<0.8%
+	    jc=Round((Close[1]-avl[1])/avl[1],3);
+		if(jc>duojcmin/100 And jc<duojcmax/100)//现价在分时均线上(>0.1%)做多，与分时均价差<0.8%
+	    {
+	        duojccon=True;
+			//kongjccon=False;
+	    }
+		if(jc>kongjcmin/100 And jc<kongjcmax/100)//现价在分时均线下（>0.1%)做空;开仓价与分时均价差<0.8%
+	    {
+	        //duojccon=False;
+			kongjccon=True;
+	    }
+
+        //分时均线高于平均价做多，低于平均价做空；
+		//或者：做空时，现价涨幅>=0.3%取消昨结算价；做多时，现价跌幅<=-0.3%取消昨结算价；（涨跌幅=(现价-昨结价）/昨结价*100%）
+		xjzdf=Round((Close[1]-jsj)/jsj,3);
+		zjjkpj=Round((jsj+jk)/2,1);
+		if(xjzdf<=df/100 Or avl[1]>zjjkpj)//做多
+	    {
+	         duofspjcon=True;
+			 //kongfspjcon=False;
+	    }
+		if(xjzdf>=zf/100 Or avl[1]<zjjkpj)//做空
+		{
+		     //duofspjcon=False;
+			 kongfspjcon=True;
+		}
+		
+		//分时线30分(>=29分钟)不纠结（分时线穿越均价线<=0.6/1000）；
+		/*----------------------------以下是需要考虑毛刺时长三分钟且只有一个毛刺的情况----------------------*/
+		lxi=1;
+		mci=0;
+		mclenthi=0;
+ 
+        //准备做多的情况
+		if(duokcon And duojccon And duofspjcon)
+		{
+			While(lxi<=lenth)
+			{
+				if(Round((close[lxi]-avl[lxi])/avl[lxi],4)<mcmin/100)//毛刺超过了幅度限制
+				{
+					duolxcon=False;
+					Break;
+				}
+				else if(close[lxi]<avl[lxi])
+				{
+					mclenthi=mclenthi+1;
+					if(close[lxi-1]>=avl[lxi-1])
+					{
+						mci=mci+1;
+					}					
+				}
+				Else if(close[lxi]>=avl[lxi])
+				{
+					mcmaxlenth=mclenthi;
+					mclenthi = 0;
+				}
+				If(mci>mc Or mcmaxlenth>mclenth)
+				{
+					duolxcon=False;
+					break;
+				}
+				Else if(mci<=mc And mcmaxlenth<=mclenth)
+				{
+					duolxcon=True;
+				}
+				lxi=lxi+1;
+			}
+		}
+		
+		//准备做空的情况
+		else if(kongkcon And kongjccon And kongfspjcon)
+		{
+			While(lxi<=lenth)
+			{
+				if(Round((close[lxi]-avl[lxi])/avl[lxi],4)>mcmax/100)//毛刺超过了幅度限制
+				{
+					konglxcon=False;
+					Break;
+				}
+				else if(close[lxi]>avl[lxi])
+				{
+					mclenthi=mclenthi+1;
+					if(close[lxi-1]<=avl[lxi-1])
+					{
+						mci=mci+1;
+					}					
+				}
+				Else if(close[lxi]<=avl[lxi])
+				{
+					mcmaxlenth=mclenthi;
+					mclenthi = 0;
+				}
+				If(mci>mc Or mcmaxlenth>mclenth)
+				{
+					konglxcon=False;
+					break;
+				}
+				Else if(mci<=mc And mcmaxlenth<=mclenth)
+				{
+					konglxcon=True;
+				}
+				lxi=lxi+1;
+			}
+		}
+		/*--------------------------------------------------------------------*/
+		/*-------------------以下只简单考虑了毛刺不高于0.6%，可以是离散的三个毛刺----
+		if(CountIf(Low<avl,lenth)<=mc And CountIf(Round((Low-avl)/avl,4)<mcmin/100,lenth)==0)//在均线以上
+	    {
+	         duolxcon=True;
+			 konglxcon=False;
+	    }
+		else if(CountIf(High>avl,lenth)<=mc And CountIf(Round((High-avl)/avl,4)>mcmax/100,lenth)==0)//在均线以下
+	    {
+	         duolxcon=False;
+			 konglxcon=True;
+	    }
+		---------------------------------------------------------------------------------*/
+	/*---------------------------------------建仓-----------------------------------------------*/
+		//做多
+        if(duokcon And duojccon And duofspjcon And duolxcon And MarketPosition==0)
+		{	
+			if(BarStatus==2)
+			{
+				Buy(0,0);
+			}else
+			{
+				Buy(0,Open);
+			}
+			SetGlobalVar(dk,EntryPrice);//记录成交价
+			SetGlobalVar(dz,Round(EntryPrice*(1-dzs/100),1));//记录止损价
+			
+			//调试用输出，可删除
+			avlstr = Text(avl[1]);
+			pj = Text(Round((jsj+jk)/2,1));
+			clostr = Text(Close[1]);
+			jsjstr = Text(jsj);
+			cjstr = Text(EntryPrice);
+			zsstr = Text(getglobalvar(15));
+			datestr = DateToString(Date);
+			timestr = TimeToString(time);
+			lx = "多开";
+			//FileAppend("H:\\shifeng\\A_Pro.txt","日期="+DateToString(Date)+"    时间="+TimeToString(time)+"    方向="+lx+"    均价="+avlstr+"    收盘价="+clostr+"    成交价="+cjstr+"    止损价="+zsstr);
+		}
+      
+		//做空
+		if(kongkcon And kongjccon And kongfspjcon And konglxcon and MarketPosition==0)
+		{ 
+			if(BarStatus==2)
+			{
+				SellShort(0,0);
+			}else
+			{
+				SellShort(0,Open);
+			}
+			SetGlobalVar(kk,EntryPrice);//记录成交价
+			SetGlobalVar(kz,Round(EntryPrice*(1+kzs/100),1));//记录止损价
+			
+			//调试用输出，可删除
+			avlstr = Text(avl[1]);
+			pj = Text(Round((jsj+jk)/2,1));
+			clostr = Text(Close[1]);
+			jsjstr = Text(jsj);
+			cjstr = Text(EntryPrice);
+			zsstr = Text(getglobalvar(16));
+			datestr = DateToString(Date);
+			timestr = TimeToString(time);
+			lx = "空开";
+			//FileAppend("H:\\shifeng\\A_Pro.txt","日期="+DateToString(Date)+"    时间="+TimeToString(time)+"    方向=空开"+"    均价="+avlstr+"    收盘价="+clostr+"    成交价="+cjstr+"    止损价="+zsstr);
+		}
+}
+
+/*---------------------------------------平仓-----------------------------------------------*/
+//多止损
+If(MarketPosition>0 And Low<=GetGlobalVar(dz))
+  {
+    	if(BarStatus==2)
+		{
+			sell(0,0);
+		}else
+		{
+			sell(0,GetGlobalVar(dz));
+		}
+		//调试用输出，可删除
+		//FileAppend("H:\\shifeng\\A_Pro.txt","开仓日期="+datestr+"    开仓时间="+timestr+"    平仓日期="+DateToString(Date)+"    平仓时间="+TimeToString(Time)+"    开仓方向="+lx+"    平仓类型=空止"+"    平均价="+pj+"    昨结="+jsjstr+"    今开="+Text(jk)+"    收盘价="+clostr+"    日内均价="+avlstr+"    开仓成交价="+cjstr+"    止损价="+zsstr+"    平仓成交价="+Text(ExitPrice));
+  }
+//空止损
+If(MarketPosition<0 And High>=GetGlobalVar(kz))
+ { 
+    	if(BarStatus==2)
+		{
+			BuyToCover(0,0);
+		}else
+		{
+			BuyToCover(0,GetGlobalVar(kz));
+		}
+		//调试用输出，可删除
+	    //FileAppend("H:\\shifeng\\A_Pro.txt","开仓日期="+datestr+"    开仓时间="+timestr+"    平仓日期="+DateToString(Date)+"    平仓时间="+TimeToString(Time)+"    开仓方向="+lx+"    平仓类型=空止"+"    平均价="+pj+"    昨结="+jsjstr+"    今开="+Text(jk)+"    收盘价="+clostr+"    日内均价="+avlstr+"    开仓成交价="+cjstr+"    止损价="+zsstr+"    平仓成交价="+Text(ExitPrice));
+ }
+//收盘平仓
+If(time>=(pcsjh+pcsjm/100) And MarketPosition!=0)
+{
+	if(BarStatus==2)
+			{
+				Sell(0,0);
+				BuyToCover(0,0);
+			}else
+			{
+				Sell(0,Open);
+				BuyToCover(0,Open);
+			}
+   
+	//调试用输出，可删除
+	//FileAppend("H:\\shifeng\\A_Pro.txt","开仓日期="+datestr+"    开仓时间="+timestr+"    平仓日期="+DateToString(Date)+"    平仓时间="+TimeToString(Time)+"    开仓方向="+lx+"    平仓类型=空止"+"    平均价="+pj+"    昨结="+jsjstr+"    今开="+Text(jk)+"    收盘价="+clostr+"    日内均价="+avlstr+"    开仓成交价="+cjstr+"    止损价="+zsstr+"    平仓成交价="+Text(ExitPrice));
+   
+	//初始化全局变量
+	SetGlobalVar(dk,0);//多单建仓价
+	SetGlobalVar(dz,0);//多单止损
+	SetGlobalVar(kk,999999);//空单建仓价
+	SetGlobalVar(kz,99999);//空单止损
+}
+End
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2012/11/29 11:32
+// 版权所有	g992com
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

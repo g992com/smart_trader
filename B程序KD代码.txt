@@ -1,0 +1,63 @@
+//------------------------------------------------------------------------
+// 简称: B_Pro_KD
+// 名称: B程序KD
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出:
+// 版本: 2013-3-26 8:58 定稿程序
+//------------------------------------------------------------------------
+Params
+	Numeric klenth(9);
+	//Numeric smoothfz(1);//平滑因子分子
+	//Numeric smoothfm(3);//平滑因子分母
+	Numeric zq(3);
+	
+	Numeric jctag(1);//开多仓的30分钟KD即时金叉信号：1
+	Numeric sctag(-1);//开空仓的30分钟KD即时死叉：-1
+	
+Vars
+	NumericSeries k30(50);
+	NumericSeries d30(50);
+	NumericSeries rsv30;
+	Numeric h30;
+	Numeric l30;
+ 
+Begin
+	h30=Highest(High,klenth);
+	l30=Lowest(Low,klenth);
+	rsv30=(Close-l30)/(h30-l30)*100;
+	 
+	//文化财经上使用的KD计算公式
+	k30=Round(SMA(rsv30,zq,1),2);
+	d30=Round(SMA(k30,zq,1),2);
+
+	//FileAppend("h:\\shifeng\\kdj.txt","日期="+DateToString(Date)+"    时间="+TimeToString(Time)+"    low="+Text(l15)+"    low1="+Text(Lowest(Low,klenth))+"    high="+Text(h15)+"    High1="+Text(Highest(High,klenth)));
+
+	//做多：30分钟KD即时金叉
+	if(k30[2]<=d30[2] And k30[1]>d30[1])
+	{
+	    SetTBProfileString("BproKD",Text(Date+Time),Text(jctag));
+		PlotBool("KD",true);
+	}
+	
+	//做空：30分钟KD即时死叉
+	if(k30[2]>=d30[2] And k30[1]<d30[1])
+	{
+	    SetTBProfileString("BproKD",Text(Date+Time),Text(sctag));
+		PlotBool("KD",False);
+	}
+
+	//画线
+	PlotNumeric("k",k30,0,Red);
+	PlotNumeric("d",d30,0,Yellow);
+
+End
+
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/03/02 23:50
+// 版权所有	g992com
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

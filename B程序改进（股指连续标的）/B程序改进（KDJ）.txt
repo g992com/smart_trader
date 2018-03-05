@@ -1,0 +1,112 @@
+//------------------------------------------------------------------------
+// 简称: B_Pro_KDJ_30
+// 名称: B程序30分钟KDJ
+// 类别: 公式应用
+// 类型: 用户应用
+// 版本: 2013-3-31 20:32
+// 输出:
+//------------------------------------------------------------------------
+
+/*---------------------------------------KDJ计算方式---------------------------------
+首先要计算周期（n日、n周等）的RSV值，即未成熟随机指标值，然后再计算K值、D值、J值等。
+以日KDJ数值的计算为例，其计算公式为
+　　n日RSV=（Cn－Ln）÷（Hn－Ln）×100
+公式中，Cn为第n日收盘价；Ln为n日内的最低价；Hn为n日内的最高价。RSV值始终在1—100间波动。
+其次，计算K值与D值：
+　　当日K值=2/3×前一日K值＋1/3×当日RSV
+　　当日D值=2/3×前一日D值＋1/3×当日K值
+其中，1/3为平滑因子。
+若无前一日K 值与D值，则可分别用50来代替。
+　　J值=3*当日D值-2*当日K值
+以9日为周期的KD线为例。首先须计算出最近9日的RSV值，即未成熟随机值，计算公式为
+　　9日RSV=（C－L9）÷（H9－L9）×100
+公式中，C为第9日的收盘价；L9为9日内的最低价；H9为9日内的最高价。
+　　K值=2/3×第8日K值＋1/3×第9日RSV
+　　D值=2/3×第8日D值＋1/3×第9日K值
+　　J值=3*第9日D值-2*第9日K值
+若无前一日K值与D值，则可以分别用50代替。 
+一般常用的KDJ参数有5，9，19，36，45，73等。
+--------------------------------------------------------------------------------------------*/
+Params
+ Numeric klenth(9);
+ Numeric smoothfz(1);//平滑因子分子
+ Numeric smoothfm(3);//平滑因子分母
+ Numeric zq(3);
+ Numeric weight(1);
+ Numeric jctag(1);//开多仓的30分钟KD即时金叉信号：1
+ Numeric sctag(-1);//开空仓的30分钟KD即时死叉：-1
+
+Vars
+ NumericSeries k30(50);
+ NumericSeries d30(50);
+ NumericSeries j30(50);
+ NumericSeries rsv30;
+ Numeric h30;
+ Numeric l30;
+ Numeric i;
+ 
+Begin
+ If(Mod(CurrentBar,2)==1)
+ {
+	 h30 = High;
+	 l30 = Low;
+	 for i=1 to klenth*2 - 1
+     {
+	 	If(High[i] > h30)
+			h30 = High[i];
+		If(Low[i] < l30)
+			l30 = Low[i];
+		If(CurrentBar[i]==0)
+		    Break;
+	 }
+	 //h30=Highest(High,klenth*2);
+	 //l30=Lowest(Low,klenth*2);
+	 rsv30=(Close-l30)/(h30-l30)*100;
+	 
+	 //标准的KD计算公式
+	 //k30=Round(k30[1]*(1-smoothfz/smoothfm)+rsv30*smoothfz/smoothfm,2);
+	 //d30=Round(d30[1]*(1-smoothfz/smoothfm)+k30*smoothfz/smoothfm,2);
+	 
+	 //文化财经上使用的KD计算公式
+	 If (CurrentBar == 1)
+	{
+		k30 = rsv30;
+		d30 = k30;
+	}Else
+	{
+	 k30 = Round((k30[2]*(zq-Weight)+rsv30*Weight)/zq,2);
+	 d30 = Round((d30[2]*(zq-Weight)+k30*Weight)/zq,2);	 
+	 j30=Round(k30*3-d30*2,2);
+	}
+ }
+
+//做多：30分钟KD即时金叉
+if(Mod(CurrentBar,2)==0 And k30[3]<=d30[3] And k30[1]>d30[1])
+{
+	SetTBProfileString("BproKD"+Symbol,Text(Date+Time),Text(jctag));
+	PlotBool("KD",true);
+}
+	
+//做空：30分钟KD即时死叉
+if(Mod(CurrentBar,2)==0 And k30[3]>=d30[3] And k30[1]<d30[1])
+{
+	SetTBProfileString("BproKD"+Symbol,Text(Date+Time),Text(sctag));
+	PlotBool("KD",False);
+}
+//画线
+ PlotNumeric("k30",k30,0,Red);
+ PlotNumeric("d30",d30,0,Yellow);
+ PlotNumeric("j30",j30,0,Green);
+
+
+End
+
+
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/03/31 20:16
+// 版权所有	robot84
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

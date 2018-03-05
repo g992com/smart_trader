@@ -1,0 +1,34 @@
+//------------------------------------------------------------------------
+// 简称: New_EXPMA
+// 名称: 指数移动平均
+// 类别: 用户函数
+// 类型: 用户函数
+// 输出: 数值型
+// 版本: 2013-3-26 9:01 定稿程序
+//------------------------------------------------------------------------
+
+Params
+	NumericSeries Price(10);
+	Numeric Length(10);
+Vars
+	Numeric sFcactor;
+	NumericSeries XAvgValue;
+Begin
+	sFcactor = 2 / ( Length + 1 );
+	if (CurrentBar == 0 )
+	{
+		XAvgValue = Price;
+	}else
+	{
+		XAvgValue = XAvgValue[1] + sFcactor * ( Price - XAvgValue[1] ) ;
+	}	
+	Return XAvgValue;
+End
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/03/02 20:29
+// 版权所有	g992com
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

@@ -1,0 +1,81 @@
+//------------------------------------------------------------------------
+// 简称: B_Pro_X_MACD
+// 名称: B程序改进MACD
+// 类别: 公式应用
+// 类型: 用户应用
+// 版本: 2013-4-2 9:10 定稿程序，使用沪深300为标的生成MACD信号
+// 输出:
+//------------------------------------------------------------------------
+
+/*------------------------------------------------------------------------
+MACD在应用上应先行计算出快速（一般选12日）移动平均数值与慢速（一般选26日）移动平均数值。以这两个数值作为测量两者（快速与慢速线）间的"差离值"依据。所谓"差离值"（DIF），即12日EMA数值减去26日EMA数值。因此，在持续的涨势中，12日EMA在26日EMA之上。其间的正差离值（+DIF）会愈来愈大。反之在跌势中，差离值可能变负（-DIF），也愈来愈大。
+至于行情开始回转，正或负差离值要缩小到怎样的程度，才真正是行情反转的信号。MACD的反转信号界定为"差离值"的9日移动平均值（9日EMA）。
+在MACD的指数平滑移动平均线计算公式中，都分别加重最近一日的份量权值，以现在流行的参数12和26为例，其公式如下：
+12日EMA的计算：EMA12 = 前一日EMA12 X 11/13 + 今日收盘 X 2/13
+26日EMA的计算：EMA26 = 前一日EMA26 X 25/27 + 今日收盘 X 2/27
+差离值（DIF）的计算： DIF = EMA12 - EMA26
+然后再根据差离值计算其9日的EMA，即"差离平均值"，"差离平均值"用DEA来表示。
+DEA = （前一日DEA X 8/10 + 今日DIF X 2/10）
+计算出的DIF与DEA为正或负值，因而形成在0轴上下移动的两条快速与慢速线。为了方便判断，用DIF减去DEA，用以绘制柱状图。 
+-------------------------------------------------------------------------*/
+Params
+	Numeric FastLength(12);
+	Numeric SlowLength(26);
+	Numeric MACDLength(9);
+	Numeric dmacdtag(1);//开多仓的MACD符合信号：1
+	Numeric kmacdtag(-1);//开空仓的MACD符合信号：-1
+	
+Vars
+	NumericSeries DIF;
+	NumericSeries DIFF;
+	NumericSeries DIFS;
+	NumericSeries DEA;
+	NumericSeries MACD;
+Begin
+	if (CurrentBar == 0 )
+	{
+		DIFF = Close;
+		DIFS = Close;
+		DEA = DIF;
+	}
+	Else
+	{
+		DIFF = DIFF[1]+2/(FastLength+1)*(Close-DIFF[1]);
+		DIFS = DIFS[1]+2/(SlowLength+1)*(Close-DIFS[1]);
+		DIF = DIFF-DIFS;
+		DEA = DEA[1]+2/(MACDLength+1)*(DIF-DEA[1]);
+		MACD = 10*(DIF - DEA);//为了能精确到小数点后3位比较大小，所以乘10，将小数点右移一位
+	}
+	
+	PlotNumeric("DIF",DIF);
+	PlotNumeric("DEA",DEA);
+	If (MACD >= 0)	
+		PlotNumeric("MACD",MACD,0,Red); 
+	Else
+		PlotNumeric("MACD",MACD,0,Green); 
+	PlotNumeric("零线",0);
+	
+	//做多：30分钟MACD向上
+	if(MACD[1]>MACD[2])
+	{
+		SetTBProfileString("BproMACD"+Symbol,Text(Date+Time),Text(dmacdtag));
+		PlotBool("tag",True);
+	}
+	//做空：30分钟MACD向下
+	if(MACD[1]<MACD[2])
+	{
+		SetTBProfileString("BproMACD"+Symbol,Text(Date+Time),Text(kmacdtag));
+		PlotBool("tag",False);
+	}
+
+
+End
+
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/04/02 09:04
+// 版权所有	robot84
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

@@ -1,0 +1,243 @@
+//------------------------------------------------------------------------
+// 简称: T_Avg
+// 名称: 
+// 类别: 公式应用
+// 类型: 用户应用
+//------------------------------------------------------------------------
+
+Params
+    Numeric FastLength(12);//平滑异同移动平均线的快线
+	Numeric SlowLength(26);//平滑异同移动平均线的慢线
+	Numeric MACDLength(9);//MACD的周期
+	Numeric FastLength_DMA(10 );
+	Numeric SlowLength_DMA(50 );
+	Numeric SmoothLength_DMA(10);
+	Numeric Length(14) ;//TRIX
+	Numeric SmoothLength(9);//TRIX
+	Numeric myExitTime(0.1509);
+	Numeric MACDDiffCompare(0.6);
+	//KDJ
+	Numeric KDJLength(14);			
+	Numeric KDJSlowLength(3);	
+	Numeric KDJSmoothLength(3);
+	Numeric KHighLimit(70);
+	Numeric KLowLimit(30);
+	Numeric DHighLimit(60);
+	Numeric DLowLimit(40);
+	//KD在超买区的K向下交叉D的次数
+	Numeric KDCrossUnderNumLimit(2);
+	//KD在超卖区的K向上交叉D的次数//
+	Numeric KDCrossOverNumLimit(2);
+Vars
+	//MACD
+	NumericSeries MACDValue; 
+	NumericSeries AvgMACD;
+	NumericSeries MACDDiff;
+	//DMA
+	NumericSeries DMAValue;
+	NumericSeries AvgDMA;
+	NumericSeries DMADiff;
+	//TRIX
+	NumericSeries TmpValue;
+	NumericSeries TRIXValue;
+	NumericSeries AvgTRIX;
+	NumericSeries TRIXDiff;
+	//KDJ
+	NumericSeries HighestValue;				
+	NumericSeries LowestValue;		
+	NumericSeries KValue;
+	Numeric SumHLValue;
+	Numeric SumCLValue;
+	NumericSeries DValue;
+	NumericSeries KDCrossUnderOrOver(0);//1 is CrossOver successfully,-1 is CrossUnder successfully,0 is Not cross
+	//KD在超买区的K向下交叉D的次数
+	Numeric KDCrossUnderNum(0);
+	//KD在超卖区的K向上交叉D的次数//
+	Numeric KDCrossOverNum(0);
+	//define Price
+	NumericSeries myEntryPrice;                   // 开仓价格
+    NumericSeries myExitPrice;                    // 平仓价格
+    Bool SendOrderThisBar(False);          	// 当前Bar有过交易
+	NumericSeries preEntryPrice(0);       	// 前一次开仓的价格
+	BoolSeries PreBreakoutFailure(false);	// 前一次突破是否失败
+	NumericSeries MACDCrossUnderOrOver(0);//1 is CrossOver successfully,-1 is CrossUnder successfully,0 is Not cross.
+	NumericSeries TRIXCrossUnderOrOver(0);//1 is CrossOver successfully,-1 is CrossUnder successfully,0 is Not cross.
+Begin
+    //MACD
+	MACDValue = XAverage( Close, FastLength ) - XAverage( Close, SlowLength ) ;	
+	AvgMACD = XAverage(MACDValue,MACDLength);
+	MACDDiff = MACDValue - AvgMACD;
+	//DMA
+	DMAValue =(AverageFC(Close, FastLength) - AverageFC(Close,SlowLength));
+	AvgDMA = AverageFC(DMAValue,SmoothLength);
+	DMADiff = DMAValue - AvgDMA;
+	//TRIX
+	TmpValue = XAverage( XAverage( XAverage( Close, Length ) , Length ) , Length ) ;
+	TRIXValue = 100 * (TmpValue - TmpValue[1])/TmpValue[1] ;
+	AvgTRIX = AverageFC(TRIXValue,SmoothLength);
+	TRIXDiff = TRIXValue - AvgTRIX;
+	//KDJ
+	HighestValue = HighestFC(High, KDJLength);
+	LowestValue = LowestFC(Low, KDJLength); 
+	SumHLValue = SummationFC(HighestValue-LowestValue,KDJSlowLength);
+	SumCLValue = SummationFC(Close - LowestValue,KDJSlowLength);
+	If(SumHLValue <> 0)
+	{
+		KValue = SumCLValue/SumHLValue*100;
+	}Else
+	{
+		KValue = 0;
+	}
+	DValue = AverageFC(KValue,KDJSmoothLength);
+	
+	//Entry
+	//if (MACDValue>0 && AvgMACD > 0 && MACDDiff<= 0.01 && SendOrderThisBar == False)
+	//{
+	//	SellShort(1,Low);
+	//	SendOrderThisBar = True;
+	//}
+	//if (MACDValue>0 && AvgMACD > 0 && MACDDiff <= 0.01 && SendOrderThisBar == False)
+	//{
+	//	Buy(1,High);
+	//	SendOrderThisBar = True;
+	//}
+	
+	
+	//if (MACDValue < 0 && AvgMACD < 0 && MACDDiff<= 0.01 && SendOrderThisBar == False)
+	//{
+	//	Buy(1,High);
+	//	SendOrderThisBar = True;
+	//}
+	
+	//if (MACDValue < 0 && AvgMACD < 0 && MACDDiff<= -0.01 && SendOrderThisBar == False)
+	//{
+	//	SellShort(1,Low);
+	//	SendOrderThisBar = True;
+	//}
+	
+	//if (MACDValue[1] > AvgMACD[1] && MACDValue <= AvgMACD && DMAValue[1] > AvgDMA[1]&& TRIXValue[1]>= AvgTRIX[1])
+	// 
+	//if (CrossUnder(MACDValue,AvgMACD) && DMAValue[1] < AvgDMA[1] && TRIXValue[1] > AvgTRIX[1])
+	// KD Cross 
+	if(CrossUnder(KValue[1],DValue[1]))
+	{
+	  KDCrossUnderOrOver = -1;
+	  KDCrossUnderNum = KDCrossUnderNum + 1;
+	 // KDCrossOverNum = 0;
+	  
+	}
+	if(CrossOver(KValue[1],DValue[1]))
+	{
+	  KDCrossUnderOrOver = 1;
+	  KDCrossOverNum = KDCrossOverNum + 1;
+	  //KDCrossUnderNum = 0;
+	}
+	
+	if(CrossUnder(MACDValue[1],AvgMACD[1]))
+	{
+	  MACDCrossUnderOrOver = -1;
+	}
+	if(CrossOver(MACDValue[1],AvgMACD[1]))
+	{
+	  MACDCrossUnderOrOver = 1;
+	}
+	
+	
+	if(CrossUnder(TRIXValue[1],AvgTRIX[1]))
+	{
+	  TRIXCrossUnderOrOver = -1;
+	}
+	if(CrossOver(TRIXValue[1],AvgTRIX[1]))
+	{
+	  TRIXCrossUnderOrOver = 1;
+	}
+	
+	//if (MACDCrossUnderOrOver == -1 && Abs(MACDDiff) > MACDDiffCompare&& TRIXCrossUnderOrOver == 1 &&DMAValue< AvgDMA)// && TRIXValue >= AvgTRIX)
+	if (KDCrossUnderNum >= KDCrossUnderNumLimit && KDCrossUnderOrOver ==-1 && KValue[1] >= KHighLimit && DValue[1] >= DHighLimit)//(KDCrossUnderOrOver ==-1 && KValue >= KHighLimit && DValue >= DHighLimit)// && TRIXValue >= AvgTRIX)
+	  { 
+	    //if(MarketPosition == 1)
+		 //{
+		 //Sell(0,0);
+		   
+		//}
+		if(MarketPosition == 0)
+		 {
+		   SellShort(1,Open);
+		   myEntryPrice = Open;
+		   KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+		   SendOrderThisBar = True;
+		 
+		}
+	}
+	
+	
+	//if (MACDValue[1] < AvgMACD[1] && MACDValue >= AvgMACD &&DMAValue[1] < AvgDMA[1]&& TRIXValue[1]<= AvgTRIX[1])
+	// &&
+	//if (MACDCrossUnderOrOver == 1 && Abs(MACDDiff) > MACDDiffCompare&& TRIXCrossUnderOrOver == -1 && DMAValue > AvgDMA)// && TRIXValue <=AvgTRIX)
+/*	if(KDCrossOverNum >= KDCrossOverNumLimit && KDCrossUnderOrOver == 1 &&  KValue <= KLowLimit && DValue <= DLowLimit) //(KDCrossUnderOrOver == 1 &&  KValue <= KLowLimit && DValue <= DLowLimit  )
+	{   //if(MarketPosition == -1)
+		//{
+		//  BuyToCover(0,0);
+		 
+		//}
+		if(MarketPosition == 0)
+		{
+		   Buy(1,Open);
+		   myEntryPrice = Open;
+		   KDCrossUnderNum = 0;
+		   
+		 
+		}
+	}
+	*/
+	
+	//Exit
+	if (Time > myExitTime && MarketPosition == 1 )
+	{
+	   Sell(1,Open);
+	}
+	if (Time > myExitTime && MarketPosition == -1  )
+	{
+		BuyToCover(1,Open);
+		KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+	}
+	if(MACDValue[1]>0 && AvgMACD[1] > 0 && MACDCrossUnderOrOver == -1 && MarketPosition == 1 && SendOrderThisBar == False )
+	{
+	  Sell(1,Open);
+	}
+	
+	if(MACDValue[1] < 0 && AvgMACD[1] < 0 && MACDCrossUnderOrOver == 1 && MarketPosition == -1 && SendOrderThisBar == False)
+	{
+	   BuyToCover(1,Open);
+	   KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+	}
+	//止损
+	if(MarketPosition == 1 && myEntryPrice-Low >= 10)
+	{
+	  Sell(1,myEntryPrice - 11);
+	}
+	
+	if(MarketPosition == -1 && myEntryPrice-High <= -10)
+	{
+	  BuyToCover(1,myEntryPrice - 9);
+	  KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+	}
+	//if (MACDValue < 2 && AvgMACD < 2 && MACDDiff <= 0.01 && MarketPosition == 1  )
+	//if (MACDValue == 0 && MarketPosition == 1  )
+	//{
+	//	Sell(0,0);
+	//}
+	//if (MACDValue == 0 && MarketPosition == -1)
+	//{
+	//	BuyToCover(0,0);
+	//}
+	
+End
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/07/24 15:19
+// 版权所有	tongtong83
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

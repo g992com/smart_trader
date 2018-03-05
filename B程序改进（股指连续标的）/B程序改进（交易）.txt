@@ -1,0 +1,231 @@
+多开:	(不能延时）				
+	1、30分钟KD即时金叉；				
+	2、60分钟5均线向上；				
+	3、股价在30分钟5均线之上；				
+	4、30分钟K线上涨、MACD向上；				
+	5、现价与分时均价差在1.59%以上不开仓；				
+	6、9:14、11:00、11:30(9:14-11:30)开仓。	
+多平:	一、固定止损：0.33%（开仓价*0.9967)。				
+	二、当日15:09分平仓。				
+			
+空开:	(不能延时）			
+	1、30分钟KD即时死叉；			
+	2、60分钟5均线向下；			
+	3、股价在30分钟5均线之下；			
+	4、30分钟K线下跌、MACD向下；			
+	5、5日线向下做空；			
+	6、10:00-10:30开仓。
+空平:	一、固定止损：0.8%（开仓价*1.008)。			
+	二、当日15:09分平仓。			
+//------------------------------------------------------------------------
+// 简称: B_Pro_X_Trade
+// 名称: B程序股指标的交易
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出:
+// 版本: 2013-4-1 11:46 定稿新程序，添加了滑动时间块、浮动止损
+//------------------------------------------------------------------------
+
+Params
+	//做多开仓时机：11:00、13:00开多仓
+	Numeric dkcqdh(0.10);
+	Numeric dkcqdm(0.45);
+	Numeric dkczdh(0.11);
+	Numeric dkczdm(0.15);
+ 
+	//做空开仓时机：10:00、10:30开空仓
+	Numeric kkcqdh(0.09);
+	Numeric kkcqdm(0.15);
+	Numeric kkczdh(0.14);
+	Numeric kkczdm(0.45);
+	
+	
+	Numeric dzs(0.33);//多止损：0.33%；
+	Numeric kzs(0.8);//空止损：0.8%；
+	
+	
+	//全局变量ID
+	Numeric tag(30);//初始化标志
+	Numeric dk(31);//理论多开仓价
+	Numeric kk(32);//理论空开仓价
+	
+	Numeric dpcsjh(0.15);//多头收盘平仓时间：14:31
+	Numeric dpcsjm(0.09);
+
+	Numeric kpcsjh(0.15);//空头收盘平仓时间：15:08
+	Numeric kpcsjm(0.09);
+	
+	Numeric dtag(1);//做多条件标志
+	Numeric ktag(-1);//做空条件标志
+	
+	Numeric hd(1);//验算用滑点：1
+ 
+	Numeric kcfd(2);//开仓价浮动点数：2
+	Numeric pcfd(1);//平仓价浮动点数：1
+	
+	Numeric dfdzs(20);//多浮动止损价差百分比：40%
+	Numeric kfdzs(40);//空浮动止损价差百分比：40%
+	
+	Numeric djc(1.59);//1.59%
+		
+Vars
+	NumericSeries fdzsjc(0);//浮动止损价差
+	NumericSeries avl;//日内均价
+	NumericSeries VolCum;//成交量
+	NumericSeries AmountCum;//成交金额
+Begin
+	/*-------------------------------初始化全局变量--------------------------*/
+	if(GetGlobalVar(tag)==InvalidNumeric)
+	{    
+		if(MarketPosition==0)
+		{
+			SetGlobalVar(tag,0);
+			SetGlobalVar(dk,0);//多单建仓价
+			SetGlobalVar(kk,99999);//空单建仓价		
+		}
+	}
+	
+	/*-------------------------------日内均线--------------------------*/
+    if(date!=date[1])
+	{
+		Amountcum=close*Vol;
+		volcum=vol;
+		avl=close;
+	}Else
+	{
+		AmountCum = amountcum[1]+close*vol;
+		VolCum = volcum[1]+vol;
+		avl=Round(amountcum/volcum,1);
+	}
+	PlotNumeric("avl",avl,0,red);
+	PlotNumeric("djc",Round(avl*(1+djc/100),1),0,Yellow);
+	/*-------------------------------获取交易信号并开仓--------------------------*/
+	//做多
+	if(MarketPosition==0 And (Time<=(dkczdh+dkczdm/100) And Time>=(dkcqdh+dkcqdm/100)) And Round((Close[1]-avl[1])/avl[1],4)<=(djc/100) And Value(GetTBProfileString("BproSignal"+Symbol,Text(Date+Time)))==dtag And (BarStatus!=2 Or (BarStatus==2 And BarsSinceExit!=0)))
+	{
+		if(BarStatus==2)
+		{
+			Buy(0,Open+kcfd);
+		}else
+		{
+			Buy(0,Open+hd);
+		}
+		SetGlobalVar(dk,Open);//记录理论成交价
+		If(AlertEnabled)
+		{
+			Alert(Text(EntryPrice)+"开多仓");
+		}
+
+	}
+	
+	//做空
+	if(MarketPosition==0 And (Time<=(kkczdh+kkczdm/100) And Time>=(kkcqdh+kkcqdm/100)) And Value(GetTBProfileString("BproSignal"+Symbol,Text(Date+Time)))==ktag And (BarStatus!=2 Or (BarStatus==2 And BarsSinceExit!=0)))
+	{
+		if(BarStatus==2)
+		{
+			SellShort(0,Open-kcfd);
+		}else
+		{
+			SellShort(0,Open-hd);
+		}
+		SetGlobalVar(kk,Open);//记录理论成交价
+		If(AlertEnabled)
+		{
+			Alert(Text(EntryPrice)+"开空仓");
+		}
+
+	}
+	
+	/*--------------------------平仓-----------------------------*/
+	//多止损
+	If(MarketPosition>0)
+	{
+		if((High-GetGlobalVar(dk))>fdzsjc)
+		{
+			fdzsjc=High-GetGlobalVar(dk);
+			PlotString("止损价",Text(Round((GetGlobalVar(dk)*(1-dzs/100)+fdzsjc*dfdzs/100),1)));
+		}
+		If(Low<=Round((GetGlobalVar(dk)*(1-dzs/100)+fdzsjc*dfdzs/100),1))
+		{
+			if(BarStatus==2)
+			{
+				sell(0,Close-pcfd);
+			}else
+			{
+				sell(0,Round((GetGlobalVar(dk)*(1-dzs/100)+fdzsjc*dfdzs/100),1)-hd);
+			}
+			If(AlertEnabled)
+			{
+				Alert(Text(ExitPrice)+"多止损");
+			}
+			fdzsjc=0;
+		}
+	}
+	//空止损
+	If(MarketPosition<0)
+	{ 
+		if((GetGlobalVar(kk)-Low)>fdzsjc)
+		{
+			fdzsjc=GetGlobalVar(kk)-Low;
+			PlotString("止损价",Text(Round((GetGlobalVar(kk)*(1+kzs/100)-fdzsjc*kfdzs/100),1)));
+		}
+		If(High>=Round((GetGlobalVar(kk)*(1+kzs/100)-fdzsjc*kfdzs/100),1))
+		{
+			if(BarStatus==2)
+			{
+				BuyToCover(0,Close+pcfd);
+			}else
+			{
+				BuyToCover(0,Round((GetGlobalVar(kk)*(1+kzs/100)-fdzsjc*kfdzs/100),1)+hd);
+			}
+			If(AlertEnabled)
+			{
+				Alert(Text(ExitPrice)+"空止损");
+			}
+			fdzsjc=0;
+		}
+	}
+	//收盘平仓
+	If(time>=(dpcsjh+dpcsjm/100) And MarketPosition>0)
+	{
+		if(BarStatus==2)
+		{
+			Sell(0,Open-pcfd);
+		}else
+		{
+			Sell(0,Open-hd);
+		}
+		If(AlertEnabled)
+		{
+			Alert(Text(ExitPrice)+"平多仓");
+		}
+		SetGlobalVar(dk,0);
+		fdzsjc=0;
+	}
+	If(time>=(kpcsjh+kpcsjm/100) And MarketPosition<0)
+	{
+		if(BarStatus==2)
+		{
+			BuyToCover(0,Open+pcfd);
+		}else
+		{
+			BuyToCover(0,Open+hd);
+		}
+		If(AlertEnabled)
+		{
+			Alert(Text(ExitPrice)+"平空仓");
+		}
+		SetGlobalVar(kk,999999);
+		fdzsjc=0;
+	}	
+End
+
+
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/04/01 11:14
+// 版权所有	robot84
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

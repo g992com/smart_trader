@@ -1,0 +1,429 @@
+//------------------------------------------------------------------------
+// 简称: T_Avg
+// 名称: 
+// 类别: 公式应用
+// 类型: 用户应用
+//------------------------------------------------------------------------
+
+Params
+    Numeric FastLength(12);//平滑异同移动平均线的快线
+	Numeric SlowLength(26);//平滑异同移动平均线的慢线
+	Numeric MACDLength(9);//MACD的周期
+	Numeric FastLength_DMA(10 );
+	Numeric SlowLength_DMA(50 );
+	Numeric SmoothLength_DMA(10);
+	Numeric Length(14) ;//TRIX
+	Numeric SmoothLength(9);//TRIX
+	Numeric myExitTime(14.45);
+	Numeric MyOpenTimeLimit(15.00);
+	Numeric MACDDiffCompare(6);
+	//KDJ
+	Numeric KDJLength(14);			
+	Numeric KDJSlowLength(3);	
+	Numeric KDJSmoothLength(3);
+	Numeric KHighLimit(70);
+	Numeric KLowLimit(30);
+	Numeric DHighLimit(60);
+	Numeric DLowLimit(40);
+	//KD在超买区的K向下交叉D的次数
+	Numeric KDCrossUnderNumLimit(2);
+	//KD在超卖区的K向上交叉D的次数//
+	Numeric KDCrossOverNumLimit(2);
+	
+	//止损百分比
+	Numeric MyExitPercentage(0.15);
+	//MTM 
+	Numeric Length_MTM(20);
+	
+	//RSI
+	Numeric Length_RSI(14) ;
+	Numeric OverSold(30) ;
+	Numeric OverBought(70) ;
+	//MACD 下穿距离当前的bar数
+	Numeric intUnderBars(5);
+	//MACD 上穿距离当前的bar数
+	Numeric intOverBars(5);
+	
+	// 简称: MFI
+   // 名称: 资金流量指数
+   /*======================================================================================*/
+   Numeric Length_MFI(14);
+	Numeric SmoothLength_MFI(6);
+	Numeric OverSold_MFI(20) ;
+	Numeric OverBought_MFI(80) ;
+Vars
+	//MACD
+	NumericSeries MACDValue; 
+	NumericSeries AvgMACD;
+	NumericSeries MACDDiff;
+	//DMA
+	NumericSeries DMAValue;
+	NumericSeries AvgDMA;
+	NumericSeries DMADiff;
+	//TRIX
+	NumericSeries TmpValue;
+	NumericSeries TRIXValue;
+	NumericSeries AvgTRIX;
+	NumericSeries TRIXDiff;
+	//KDJ
+	NumericSeries HighestValue;				
+	NumericSeries LowestValue;		
+	NumericSeries KValue;
+	Numeric SumHLValue;
+	Numeric SumCLValue;
+	NumericSeries DValue;
+	NumericSeries KDCrossUnderOrOver(0);//1 is CrossOver successfully,-1 is CrossUnder successfully,0 is Not cross
+	//KD在超买区的K向下交叉D的次数
+	NumericSeries KDCrossUnderNum(0);
+	//KD在超卖区的K向上交叉D的次数//
+	NumericSeries KDCrossOverNum(0);
+	//MTM
+	NumericSeries MTMValue;
+	//RSI
+	NumericSeries NetChgAvg( 0 );
+	NumericSeries TotChgAvg( 0 );
+	Numeric SF( 0 );
+	Numeric Change( 0 );	
+	Numeric ChgRatio( 0 ) ;
+	NumericSeries RSIValue;
+	
+	//define Price
+	NumericSeries myEntryPrice;                   // 开仓价格
+    NumericSeries myExitPrice;                    // 平仓价格
+    Bool SendOrderThisBar(False);          	// 当前Bar有过交易
+	NumericSeries preEntryPrice(0);       	// 前一次开仓的价格
+	BoolSeries PreBreakoutFailure(false);	// 前一次突破是否失败
+	NumericSeries MACDCrossUnderOrOver(0);//1 is CrossOver successfully,-1 is CrossUnder successfully,0 is Not cross.
+	NumericSeries TRIXCrossUnderOrOver(0);//1 is CrossOver successfully,-1 is CrossUnder successfully,0 is Not cross.
+	//2013-08-21 update
+	Numeric MACDCrossOver_OverZeroNum(0);
+	Numeric MACDCrossUnder_UnderZeroNum(0);
+	Numeric intTemp;
+	Numeric intTemp2;
+	Numeric HaveCrossBars(0);
+	Numeric i;
+	Numeric j;
+	
+	// 简称: MFI
+   // 名称: 资金流量指数
+   /*======================================================================================*/
+	NumericSeries TypicalPrice;
+	NumericSeries MoneyFlow;
+	NumericSeries PMoneyFlow;
+	Numeric PType;
+	Numeric SumMoneyFlow;
+	NumericSeries MFIValue;
+	Numeric SumPMoneyFlow;
+	Numeric MFIAvg;
+	
+Begin
+    //MACD
+	MACDValue = XAverage( Close, FastLength ) - XAverage( Close, SlowLength ) ;	
+	AvgMACD = XAverage(MACDValue,MACDLength);
+	MACDDiff = MACDValue - AvgMACD;
+	//DMA
+	DMAValue =(AverageFC(Close, FastLength) - AverageFC(Close,SlowLength));
+	AvgDMA = AverageFC(DMAValue,SmoothLength);
+	DMADiff = DMAValue - AvgDMA;
+	//TRIX
+	TmpValue = XAverage( XAverage( XAverage( Close, Length ) , Length ) , Length ) ;
+	TRIXValue = 100 * (TmpValue - TmpValue[1])/TmpValue[1] ;
+	AvgTRIX = AverageFC(TRIXValue,SmoothLength);
+	TRIXDiff = TRIXValue - AvgTRIX;
+	//KDJ
+	//===================================================================================
+	HighestValue = HighestFC(High, KDJLength);
+	LowestValue = LowestFC(Low, KDJLength); 
+	SumHLValue = SummationFC(HighestValue-LowestValue,KDJSlowLength);
+	SumCLValue = SummationFC(Close - LowestValue,KDJSlowLength);
+	If(SumHLValue <> 0)
+	{
+		KValue = SumCLValue/SumHLValue*100;
+	}Else
+	{
+		KValue = 0;
+	}
+	DValue = AverageFC(KValue,KDJSmoothLength);
+
+	
+	//=========================================================================================
+	
+	//RSI
+	//=========================================================================================
+	If(CurrentBar <= Length - 1)
+	{
+		NetChgAvg = ( Close - Close[Length] ) / Length ;
+		TotChgAvg = Average( Abs( Close - Close[1] ), Length ) ;
+	}Else
+	{
+		SF = 1/Length;
+		Change = Close - Close[1] ;
+		NetChgAvg = NetChgAvg[1] + SF * ( Change - NetChgAvg[1] ) ;
+		TotChgAvg = TotChgAvg[1] + SF * ( Abs( Change ) - TotChgAvg[1] ) ;	
+	}
+	
+	If( TotChgAvg <> 0 )
+	{
+		ChgRatio = NetChgAvg / TotChgAvg;
+	}else
+	{
+		ChgRatio = 0 ;
+	}	
+	RSIValue = 50 * ( ChgRatio + 1 );
+	//=================================================================================
+	
+	//MTM
+	MTMValue = Close/Close[Length_MTM]*100 - 100;
+	
+	
+	// 简称: MFI
+   // 名称: 资金流量指数
+   /*======================================================================================*/
+   TypicalPrice = (High+Low+Close)/3;
+	PType = IIF(TypicalPrice >= TypicalPrice[1], 1, 0);
+	MoneyFlow = Vol * TypicalPrice;
+	PMoneyFlow = MoneyFlow*PType;
+	SumMoneyFlow = SummationFC(MoneyFlow, Length_MFI);
+	SumPMoneyFlow = SummationFC(PMoneyFlow, Length_MFI);
+	If(SumMoneyFlow <> 0)
+		MFIValue = SumPMoneyFlow/SumMoneyFlow*100;
+	Else
+		MFIValue = 0;
+	MFIAvg = AverageFC(MFIValue, SmoothLength_MFI);
+	//PlotNumeric("MFI",MFIValue,Red);
+	//PlotNumeric("MFI Avg",MFIAvg,Green);
+   
+   
+	//
+	//Entry
+	//if (MACDValue>0 && AvgMACD > 0 && MACDDiff<= 0.01 && SendOrderThisBar == False)
+	//{
+	//	SellShort(1,Low);
+	//	SendOrderThisBar = True;
+	//}
+	//if (MACDValue>0 && AvgMACD > 0 && MACDDiff <= 0.01 && SendOrderThisBar == False)
+	//{
+	//	Buy(1,High);
+	//	SendOrderThisBar = True;
+	//}
+	
+	
+	//if (MACDValue < 0 && AvgMACD < 0 && MACDDiff<= 0.01 && SendOrderThisBar == False)
+	//{
+	//	Buy(1,High);
+	//	SendOrderThisBar = True;
+	//}
+	
+	//if (MACDValue < 0 && AvgMACD < 0 && MACDDiff<= -0.01 && SendOrderThisBar == False)
+	//{
+	//	SellShort(1,Low);
+	//	SendOrderThisBar = True;
+	//}
+	
+	//if (MACDValue[1] > AvgMACD[1] && MACDValue <= AvgMACD && DMAValue[1] > AvgDMA[1]&& TRIXValue[1]>= AvgTRIX[1])
+	// 
+	//if (CrossUnder(MACDValue,AvgMACD) && DMAValue[1] < AvgDMA[1] && TRIXValue[1] > AvgTRIX[1])
+	// KD Cross 
+	if(CrossUnder(KValue[1],DValue[1]))// && KValue[1] >= KHighLimit && DValue[1] >= DHighLimit)
+	{
+	  KDCrossUnderOrOver = -1;
+	  KDCrossUnderNum = KDCrossUnderNum + 1;
+	  Commentary(" Prv KDCrossUnderNum ="+Text(KDCrossUnderNum));
+	  Commentary(" KDCrossUnderOrOver ="+Text(KDCrossUnderOrOver));
+	  Commentary(" KValue[1] ="+Text(KValue[1]));
+	  Commentary(" DValue[1] ="+Text(DValue[1]));
+	 // KDCrossOverNum = 0;
+	  
+	}
+	if(CrossOver(KValue[1],DValue[1]))
+	{
+	  KDCrossUnderOrOver = 1;
+	  KDCrossOverNum = KDCrossOverNum + 1;
+	  
+	  //KDCrossUnderNum = 0;
+	}
+	
+	// 2013-08-11 add
+	//=======================================================================
+	/*
+	if(KValue[1] <= KLowLimit Or DValue[1] <= DLowLimit )
+	{
+	  // 当K,D回到超卖区，将KDCrossUnderNum重置为0；
+	  KDCrossUnderNum = 0;
+	}*/
+	//=======================================================================
+	if(CrossUnder(MACDValue[1],AvgMACD[1]))
+	{
+	  MACDCrossUnderOrOver = -1;
+	}
+	if(CrossOver(MACDValue[1],AvgMACD[1]))
+	{
+	  MACDCrossUnderOrOver = 1;
+	}
+	
+	/*if(CrossUnder(MACDValue[1],AvgMACD[1]) &&  )
+	{
+	  MACDCrossUnderOrOver = -1;
+	}*/
+	if(CrossOver(MACDValue[1],AvgMACD[1]))
+	{
+	  MACDCrossUnderOrOver = 1;
+	}
+	
+	
+	if(CrossUnder(TRIXValue[1],AvgTRIX[1]))
+	{
+	  TRIXCrossUnderOrOver = -1;
+	}
+	if(CrossOver(TRIXValue[1],AvgTRIX[1]))
+	{
+	  TRIXCrossUnderOrOver = 1;
+	}
+	//
+	//if (MACDCrossUnderOrOver == -1 && Abs(MACDDiff) > MACDDiffCompare&& TRIXCrossUnderOrOver == 1 &&DMAValue< AvgDMA)// && TRIXValue >= AvgTRIX)
+	
+	//2013-08-11 add condition:MACDDiff[1] <MACDDiff[2] 
+	intTemp = MyOpenTimeLimit/100;
+	if (KDCrossUnderNum >= KDCrossUnderNumLimit && KDCrossUnderOrOver ==-1 && KValue[1] >= KHighLimit && DValue[1] >= DHighLimit)// && Time < intTemp)// && RSIValue[1] >= 60)// && MACDDiff[1] <MACDDiff[2] )//&& KValue[1] < KValue[2] && DValue[1] < DValue[2])//(KDCrossUnderOrOver ==-1 && KValue >= KHighLimit && DValue >= DHighLimit)// && TRIXValue >= AvgTRIX)
+	  { 
+	    //if(MarketPosition == 1)
+		 //{
+		 //Sell(0,0);
+		   
+		//}
+		Commentary(" Prv KDCrossUnderNum ="+Text(KDCrossUnderNum));
+		PlotBool("KDCrossUnderNum",KDCrossUnderNum >= KDCrossUnderNumLimit);
+		
+		intTemp2 = BarsSinceToday();
+	   for i = 1 To intTemp2
+
+	   { if (CrossUnder(MACDValue[i],AvgMACD[i]))
+	      {
+	       HaveCrossBars = i;
+		   Break;
+		  }
+	   }
+	   
+		if(MarketPosition == 0 && HaveCrossBars >= intUnderBars)
+		 {
+		   SellShort(1,Open);
+		   myEntryPrice = Open;
+		   KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+		   SendOrderThisBar = True;
+		   Commentary("KDCrossUnderNum ="+Text(KDCrossUnderNum));
+		   Commentary("OpenTimeLimit="+Text(MyOpenTimeLimit));
+		   
+		 
+		}
+	}
+	
+	
+	//if (MACDValue[1] < AvgMACD[1] && MACDValue >= AvgMACD &&DMAValue[1] < AvgDMA[1]&& TRIXValue[1]<= AvgTRIX[1])
+	// &&
+	//if (MACDCrossUnderOrOver == 1 && Abs(MACDDiff) > MACDDiffCompare&& TRIXCrossUnderOrOver == -1 && DMAValue > AvgDMA)// && TRIXValue <=AvgTRIX)
+/*	if(KDCrossOverNum >= KDCrossOverNumLimit && KDCrossUnderOrOver == 1 &&  KValue <= KLowLimit && DValue <= DLowLimit) //(KDCrossUnderOrOver == 1 &&  KValue <= KLowLimit && DValue <= DLowLimit  )
+	{   //if(MarketPosition == -1)
+		//{
+		//  BuyToCover(0,0);
+		 
+		//}
+		if(MarketPosition == 0)
+		{
+		   Buy(1,Open);
+		   myEntryPrice = Open;
+		   KDCrossUnderNum = 0;
+		   
+		 
+		}
+	}
+	*/
+	
+	//Exit
+	/*if (Time > myExitTime/100 && MarketPosition == 1 )
+	{
+	   Sell(1,Open);
+	}
+	if (Time > myExitTime/100 && MarketPosition == -1  )
+	{
+		BuyToCover(1,Open);
+		KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+		Commentary("时间 Exit");
+		Commentary("KDCrossUnderNum ="+Text(KDCrossUnderNum));
+	}*/
+	if( MACDCrossUnderOrOver == -1 && MarketPosition == 1 && SendOrderThisBar == False )
+	{
+	  Sell(1,Open);
+	}
+	//(RSIValue[1] <= 40)//&& 
+	if(MACDCrossUnderOrOver == 1 && MTMValue[1] > 0  && Abs(MACDDiff[1]) > MACDDiffCompare && MarketPosition == -1 && SendOrderThisBar == False)// && RSIValue[1] <= 35)//( Abs(MACDValue[1]) <= 0.3 Or 
+	{
+	/*
+	   BuyToCover(1,Open);
+	   //KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+	   Commentary("MACD Exit");
+	   Commentary("KDCrossUnderNum ="+Text(KDCrossUnderNum));
+	   */
+	  
+	  intTemp2 = BarsSinceToday();
+	   for j = 1 To intTemp2
+
+	   { if (CrossUnder(MACDValue[j],AvgMACD[j]))
+	      {
+	       HaveCrossBars = j;
+		   Break;
+		  }
+	   }
+	   
+	   if(HaveCrossBars > intOverBars)
+	   {
+	       BuyToCover(1,Open);
+	       //KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+		   Commentary("MACD Exit");
+	       Commentary("KDCrossUnderNum ="+Text(KDCrossUnderNum));
+	   }
+	   
+	   
+	}
+	//止损
+	if(MarketPosition == 1 && myEntryPrice-Low >= myEntryPrice*MyExitPercentage/100)
+	{
+	  Sell(1,myEntryPrice - 11);
+	}
+	
+	 if(RSIValue[1] >= OverBought )
+	 {
+	   if(MarketPosition == -1 && High-myEntryPrice >= myEntryPrice*MyExitPercentage/100) //&& (MACDValue[1] > 0 or AvgMACD[1] > 0))
+	   {
+	     myExitPrice = myEntryPrice + myEntryPrice*MyExitPercentage/100;
+	     BuyToCover(1,myExitPrice);
+	     KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+	     Commentary("止损 Exit");
+	   }
+	Else
+	  if(MarketPosition == -1 && High-myEntryPrice >= 8) //&& (MACDValue[1] > 0 or AvgMACD[1] > 0))
+	   {
+	     myExitPrice = myEntryPrice + 8;
+	     BuyToCover(1,myExitPrice);
+	     KDCrossUnderNum = 0;//将K下穿D的次数重置为0；
+	     Commentary("止损 10 POINT Exit");
+	   }
+	}
+	//if (MACDValue < 2 && AvgMACD < 2 && MACDDiff <= 0.01 && MarketPosition == 1  )
+	//if (MACDValue == 0 && MarketPosition == 1  )
+	//{
+	//	Sell(0,0);
+	//}
+	//if (MACDValue == 0 && MarketPosition == -1)
+	//{
+	//	BuyToCover(0,0);
+	//}
+	
+End
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/07/24 15:19
+// 版权所有	tongtong83
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

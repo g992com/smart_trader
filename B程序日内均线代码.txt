@@ -1,0 +1,50 @@
+//------------------------------------------------------------------------
+// 简称: B_Pro_Avl
+// 名称: B程序日内均线
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出:
+// 版本: 2013-3-26 8:54 定稿程序
+//------------------------------------------------------------------------
+Params
+	Numeric djc(1.59);//1.59%
+	Numeric jctag(1);//价差符合信号：1
+
+Vars
+	NumericSeries avl;//日内均价
+	NumericSeries VolCum;//成交量
+	NumericSeries AmountCum;//成交金额
+	
+Begin
+/*-------------------------------日内均线--------------------------*/
+    if(date!=date[1])
+	{
+		Amountcum=close*Vol;
+		volcum=vol;
+		avl=close;
+	}Else
+	{
+		AmountCum = amountcum[1]+close*vol;
+		VolCum = volcum[1]+vol;
+		avl=Round(amountcum/volcum,1);
+	}
+	PlotNumeric("avl",avl,0,red);
+	PlotNumeric("djc",Round(avl*(1+djc/100),1),0,Yellow);
+	
+	//现价与分时均价差在1.59%以上不开仓
+	if(Mod(Minute,30)==0 And Round((Close[1]-avl[1])/avl[1],4)<=(djc/100))
+	{
+	    SetTBProfileString("Bproavl",Text(Date+Time),Text(jctag));
+            PlotBool("avl",True);
+	}
+	
+End
+
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/02/28 23:05
+// 版权所有	g992com
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

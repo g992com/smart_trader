@@ -1,0 +1,79 @@
+//------------------------------------------------------------------------
+// 简称: B_Pro_X_KDJ_30
+// 名称: B程序改进KDJ
+// 类别: 公式应用
+// 类型: 用户应用
+// 版本: 2013-4-02  9:00 定稿程序，使用沪深300为KD信号标的
+//       2013-4-02 21:26 去掉原有的Highest、Lowest和SMA函数，用自己的函数代替
+//       2013-4-09 14:39 将KD即时死叉、即时金叉信号修改为金叉阶段和死叉阶段
+//       2013-5-28 14:11 将KD死叉、金叉阶段信号修改回即时金叉和死叉
+// 输出:
+//------------------------------------------------------------------------
+Params
+	Numeric klenth(9);
+	Numeric zq(3);
+	Numeric jctag(1);//开多仓的30分钟KD金叉阶段信号：1
+	Numeric sctag(-1);//开空仓的30分钟KD死叉阶段信号：-1
+	
+Vars
+	NumericSeries k30(50);
+	NumericSeries d30(50);
+	NumericSeries rsv30;
+	Numeric h30;
+	Numeric l30;
+	Numeric i;
+ 
+Begin
+	h30=High;
+	l30=Low;
+	for i=1 to klenth - 1
+    	{
+		If(High[i] > h30)
+			h30 = High[i];
+		if(Low[i]<l30)
+			l30=Low[i];
+	}
+
+	rsv30=(Close-l30)/(h30-l30)*100;
+	 
+	//文化财经上使用的KD计算公式
+	if (CurrentBar == 0 )
+	{
+		k30=rsv30;
+		d30=k30;	
+	}
+	Else
+	{
+		k30 = Round((k30[1]*(zq-1)+rsv30*1)/zq,2);
+		d30 = Round((d30[1]*(zq-1)+k30*1)/zq,2);
+	}
+	
+	//做多：30分钟KD即时金叉
+	if(k30[1]>d30[1] AND k30[2]<=d30[2])
+	{
+	    SetTBProfileString("BproKD"+Symbol,Text(Date+Time),Text(jctag));
+		PlotBool("KD",true);
+	}
+	
+	//做空：30分钟KD即时死叉
+	if(k30[1]<d30[1] and k30[2]>=d30[2])
+	{
+	    SetTBProfileString("BproKD"+Symbol,Text(Date+Time),Text(sctag));
+		PlotBool("KD",False);
+	}
+
+	//画线
+	PlotNumeric("k",k30,0,Red);
+	PlotNumeric("d",d30,0,Yellow);
+
+End
+
+
+
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/04/02 08:51
+// 版权所有	robot84
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

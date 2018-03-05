@@ -1,0 +1,132 @@
+//------------------------------------------------------------------------
+// 简称: B_Pro_X_Signal
+// 名称: B程序沪深标的信号
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出:
+// 版本: 2013-4-1 11:11 定稿程序
+//       2013-4-2 23:29 去掉发出信号的时间限制
+//------------------------------------------------------------------------
+
+Params
+	Numeric macc(5);//均线计算周期：5
+	
+	Numeric krx(5);//5日线
+	
+	Numeric dtag(1);//做多条件标志
+	Numeric ktag(-1);//做空条件标志
+
+	
+Vars
+	NumericSeries vma30(0);//移动平均线
+	Numeric ima30(0);//计算移动平均线的循环变量
+	Numeric maclose30(0);//计算均线用的记录30分钟K线的收盘价
+	
+	NumericSeries vma60(0);//移动平均线
+	Numeric ima60(0);//计算移动平均线的循环变量
+	Numeric maclose60(0);//计算均线用的记录60分钟K线的收盘价
+	
+	NumericSeries vma5day(0);//移动平均线
+	Numeric ima5day(0);//计算移动平均线的循环变量
+	Numeric maclose5day(0);//计算均线用的记录日线的收盘价
+
+	
+	Bool dkdcon(False);
+	Bool kkdcon(False);
+
+	Bool davl60con(False);
+	Bool kavl60con(False);
+	
+	Bool davl30con(False);
+	Bool kavl30con(False);
+	
+	Bool dmacdcon(False);
+	Bool kmacdcon(False);
+	
+	Bool djccon(False);
+	
+	Bool krxcon(False);
+	
+Begin
+
+	/*-------------------------------30分钟5均线----------------------------------*/
+	//30分钟均线
+	maclose30 = Close;
+	ima30 = 0;
+	While((ima30+1)<macc)
+	{
+		maclose30 = maclose30 + Close[ima30+1];
+		ima30=ima30+1;
+	}
+	vma30=Round(maclose30/macc,1);
+	//画均线
+	PlotNumeric("vma30",vma30,0,red);
+
+	/*-------------------------------60分钟5均线----------------------------------*/
+	If(Mod(CurrentBar,2)==1)
+	{
+		//60分钟均线
+		maclose60 = Close;
+		ima60 = 0;
+		While((ima60/2+1)<macc)
+		{
+			maclose60 = maclose60 + Close[ima60+2];
+			ima60=ima60+2;
+		}
+		vma60=Round(maclose60/macc,1);
+	}
+	Else
+	{
+		//60分钟均线
+		vma60=vma60[1];
+	}
+	//画均线
+	PlotNumeric("vma60",vma60,0,Yellow);
+	
+	/*-------------------------------日线5均线----------------------------------*/
+	If(Mod(CurrentBar+1,8)==0)
+	{
+		maclose5day = Close;
+		ima5day = 0;
+		While((ima5day/8+1)<krx)
+		{
+			maclose5day = maclose5day + Close[ima5day+8];
+			ima5day=ima5day+8;
+		}
+		vma5day=Round(maclose5day/krx,1);
+	}
+	Else
+	{
+		vma5day=vma5day[1];
+	}
+	//画均线
+	PlotNumeric("vma5day",vma5day,0,Green);
+
+	/*-------------------------------指标判断----------------------------------*/
+	//做多
+	If(vma60[Mod(CurrentBar,2)+1]>vma60[Mod(CurrentBar,2)+3] And Close[1]>vma30[1] And Close[1]>Close[2] )
+	{
+		If(Value(GetTBProfileString("BproKD"+Symbol,Text(Date+Time)))==dtag And Value(GetTBProfileString("BproMACD"+Symbol,Text(Date+Time)))==dtag)
+		{
+			SetTBProfileString("BproSignal"+Symbol,Text(Date+Time),Text(dtag));
+                        PlotBool("signal",True);
+		}
+	}
+
+	//做空
+	If(vma60[Mod(CurrentBar,2)+1]<vma60[Mod(CurrentBar,2)+3] And vma5day[Mod(CurrentBar,8)+1]<=vma5day[Mod(CurrentBar,8)+9] And Close[1]<vma30[1] And Close[1]<Close[2])
+	{
+		If(Value(GetTBProfileString("BproKD"+Symbol,Text(Date+Time)))==ktag And Value(GetTBProfileString("BproMACD"+Symbol,Text(Date+Time)))==ktag)
+		{
+			SetTBProfileString("BproSignal"+Symbol,Text(Date+Time),Text(ktag));
+                        PlotBool("signal",False);
+		}
+	}
+End
+//------------------------------------------------------------------------
+// 编译版本	GS2010.12.08
+// 用户版本	2013/04/01 07:40
+// 版权所有	robot84
+// 更改声明	TradeBlazer Software保留对TradeBlazer平台
+//			每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------
